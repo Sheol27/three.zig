@@ -5,7 +5,13 @@ const ArrayList = std.ArrayList;
 
 const Vector3 = extern struct {x: f32, y: f32, z: f32};
 
-pub fn load(io: Io, alloc: Allocator, input_path: []const u8) !void {
+const Mesh = struct {
+    vertices: []Vector3,
+    indices: []usize,
+    normals: []Vector3,
+};
+
+pub fn load(io: Io, alloc: Allocator, input_path: []const u8) !Mesh {
     const dir = Io.Dir.cwd();
 
     var file = try dir.openFile(io, input_path, .{});
@@ -55,4 +61,9 @@ pub fn load(io: Io, alloc: Allocator, input_path: []const u8) !void {
     std.debug.print("Read {} vertices {} indices and {} normals\n",
         .{vertices.items.len, indices.items.len, normals.items.len,});
 
+    return Mesh {
+        .vertices = try vertices.toOwnedSlice(alloc),
+        .indices = try indices.toOwnedSlice(alloc),
+        .normals = try normals.toOwnedSlice(alloc)
+    };
 }

@@ -14,5 +14,5 @@ pub fn main(init: std.process.Init) !void {
     }
 
     const input_path: []const u8 = args[1];
-    try ztloader.load(init.io, allocator, input_path);
+    _ = try ztloader.load(init.io, allocator, input_path);
 }
