@@ -19,5 +19,5 @@ pub fn main(init: std.process.Init) !void {
     const mesh: Mesh = try .fromFile(init.io, allocator, input_path);
     defer mesh.deinit(allocator);
 
-    std.debug.print("Loaded {} faces\n", .{mesh.triangles_count});
+    std.debug.print("Loaded {} faces with {} vertices and {} indices\n", .{ mesh.triangles_count, mesh.indices.len, mesh.vertices.len });
 }

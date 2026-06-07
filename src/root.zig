@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
 
-const Vector3 = extern struct {x: f32, y: f32, z: f32};
+const Vector3 = extern struct { x: f32, y: f32, z: f32 };
 
 pub const Mesh = struct {
     vertices: []Vector3,
@@ -11,8 +11,80 @@ pub const Mesh = struct {
     normals: []Vector3,
     triangles_count: usize,
 
-    /// Parse a binary STL from any reader. Caller owns the result; call deinit.
+    /// Parse an STL from any reader. It automatically detects beteen ascii and binary
     pub fn fromReader(r: *Io.Reader, alloc: Allocator) !Mesh {
+        const head = try r.peek(5);
+        return if (std.mem.eql(u8, head, "solid"))
+            parseAscii(r, alloc)
+        else
+            parseBinary(r, alloc);
+    }
+
+    // Parse an ascii STL from any reader.
+    pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
+        // skip header
+        _ = try r.takeDelimiter('\n');
+
+        const triangles_count = 1000;
+        var vertices: ArrayList(Vector3) = try .initCapacity(alloc, triangles_count * 3);
+        errdefer vertices.deinit(alloc);
+        var normals: ArrayList(Vector3) = try .initCapacity(alloc, triangles_count);
+        errdefer normals.deinit(alloc);
+        var indices: ArrayList(usize) = try .initCapacity(alloc, triangles_count * 3);
+        errdefer indices.deinit(alloc);
+
+        var hm: std.AutoHashMap([12]u8, usize) = .init(alloc);
+        defer hm.deinit();
+
+        while (true) {
+            if (try r.takeDelimiter('\n')) |nl| {
+                var split = std.mem.tokenizeAny(u8, nl, " \t\r");
+                const h = split.next().?; // facet or endsolid
+                if (std.mem.eql(u8, h, "endsolid")) break;
+                _ = split.next(); // normal
+
+                const normal: Vector3 = .{ .x = try std.fmt.parseFloat(f32, split.next().?), .y = try std.fmt.parseFloat(f32, split.next().?), .z = try std.fmt.parseFloat(f32, split.next().?) };
+                try normals.append(alloc, normal);
+            }
+
+            _ = try r.takeDelimiter('\n'); // outer loop
+
+            for (0..3) |_| {
+                const nl = (try r.takeDelimiter('\n')) orelse return error.UnexpectedEof;
+                var split = std.mem.tokenizeAny(u8, nl, " \t\r");
+                _ = split.next(); // vertex
+
+                const vertex: Vector3 = .{
+                    .x = try std.fmt.parseFloat(f32, split.next().?),
+                    .y = try std.fmt.parseFloat(f32, split.next().?),
+                    .z = try std.fmt.parseFloat(f32, split.next().?),
+                };
+
+                const key: [12]u8 = @bitCast(vertex);
+                const gop = try hm.getOrPut(key);
+                if (!gop.found_existing) {
+                    gop.value_ptr.* = vertices.items.len;
+                    try vertices.append(alloc, vertex);
+                }
+                try indices.append(alloc, gop.value_ptr.*);
+            }
+
+            _ = try r.takeDelimiter('\n'); // endloop
+            _ = try r.takeDelimiter('\n'); // endfacet
+
+        }
+
+        const verts = try vertices.toOwnedSlice(alloc);
+        errdefer alloc.free(verts);
+        const inds = try indices.toOwnedSlice(alloc);
+        errdefer alloc.free(inds);
+        const norms = try normals.toOwnedSlice(alloc);
+
+        return .{ .vertices = verts, .indices = inds, .normals = norms, .triangles_count = norms.len };
+    }
+
+    /// Parse a binary STL from any reader.
+    pub fn parseBinary(r: *Io.Reader, alloc: Allocator) !Mesh {
         // skip header
         _ = try r.discard(.limited(80));
         const triangles_count: usize = try r.takeInt(u32, .little);
@@ -51,10 +123,10 @@ pub const Mesh = struct {
         errdefer alloc.free(inds);
         const norms = try normals.toOwnedSlice(alloc);
 
-        return .{ .vertices = verts, .indices = inds, .normals = norms, .triangles_count = triangles_count};
+        return .{ .vertices = verts, .indices = inds, .normals = norms, .triangles_count = triangles_count };
     }
 
-    /// Convenience: open a file by path and parse it.
+    /// Open a file by path and parse it.
     pub fn fromFile(io: Io, alloc: Allocator, path: []const u8) !Mesh {
         const dir = Io.Dir.cwd();
         var file = try dir.openFile(io, path, .{});
@@ -69,4 +141,3 @@ pub const Mesh = struct {
         alloc.free(self.indices);
         alloc.free(self.normals);
     }
-};
