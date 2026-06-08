@@ -51,6 +51,38 @@ pub const Vector3 = extern struct {
         };
     }
 
+    pub fn addScalar(self: Vector3, s: f32) Vector3 {
+        return .{
+            .x = self.x + s,
+            .y = self.y + s,
+            .z = self.z + s,
+        };
+    }
+
+    pub fn subScalar(self: Vector3, s: f32) Vector3 {
+        return .{
+            .x = self.x - s,
+            .y = self.y - s,
+            .z = self.z - s,
+        };
+    }
+
+    pub fn mulScalar(self: Vector3, s: f32) Vector3 {
+        return .{
+            .x = self.x * s,
+            .y = self.y * s,
+            .z = self.z * s,
+        };
+    }
+
+    pub fn divScalar(self: Vector3, s: f32) Vector3 {
+        return .{
+            .x = self.x / s,
+            .y = self.y / s,
+            .z = self.z / s,
+        };
+    }
+
     pub fn scale(self: Vector3, s: f32) Vector3 {
         return .{ .x = self.x * s, .y = self.y * s, .z = self.z * s };
     }
@@ -135,7 +167,6 @@ pub const Vector3 = extern struct {
             @abs(self.z - other.z) <= tolerance;
     }
 };
-
 
 test "basic operations" {
     const a = Vector3.init(1, 2, 3);

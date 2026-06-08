@@ -1,5 +1,6 @@
 const std = @import("std");
 const math = @import("math.zig");
+const BoundingBox = @import("BoundingBox.zig");
 const Vector3 = math.Vector3;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -141,4 +142,14 @@ pub fn deinit(self: *const Mesh, alloc: Allocator) void {
     alloc.free(self.vertices);
     alloc.free(self.indices);
     alloc.free(self.normals);
+}
+
+pub fn computeBoundingBox(self: *const Mesh) BoundingBox {
+    var min: Vector3 = .splat(std.math.floatMax(f32));
+    var max: Vector3 = .splat(std.math.floatMin(f32));
+    for (self.vertices) |v| {
+        max = max.max(v);
+        min = min.min(v);
+    }
+    return .{ .min = min, .max = max };
 }

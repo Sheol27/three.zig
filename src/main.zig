@@ -20,4 +20,8 @@ pub fn main(init: std.process.Init) !void {
     defer mesh.deinit(allocator);
 
     std.debug.print("Loaded {} faces with {} vertices and {} indices\n", .{ mesh.triangles_count, mesh.indices.len, mesh.vertices.len });
+
+    const bb = mesh.computeBoundingBox();
+    std.debug.print("{any}\n", .{bb});
+    std.debug.print("{any}\n", .{bb.center()});
 }
