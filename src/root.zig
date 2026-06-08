@@ -1,9 +1,9 @@
 const std = @import("std");
+const math = @import("math.zig");
+const Vector3 = math.Vector3;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
-
-const Vector3 = extern struct { x: f32, y: f32, z: f32 };
 
 pub const Mesh = struct {
     vertices: []Vector3,
@@ -141,3 +141,4 @@ pub const Mesh = struct {
         alloc.free(self.indices);
         alloc.free(self.normals);
     }
+};
