@@ -11,9 +11,9 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "three",
+        .name = "viewer",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("examples/simple.zig"),
             .optimize = optimize,
             .target = target,
             .strip = optimize != .Debug,
@@ -28,14 +28,12 @@ pub fn build(b: *std.Build) void {
 
     const run_exe = b.addRunArtifact(exe);
 
-    const run_step = b.step("run", "Run the application");
-
-    const file_name: []const u8 = "file.stl";
-    run_exe.addArg(file_name);
+    const run_step = b.step("run", "Run the example");
 
     if (b.args) |args| {
         run_exe.addArgs(args);
     }
+
     run_step.dependOn(&run_exe.step);
 
     const mod_tests = b.addTest(.{ .root_module = mod });

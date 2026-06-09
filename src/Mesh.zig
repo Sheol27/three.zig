@@ -45,7 +45,12 @@ pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
             if (std.mem.eql(u8, h, "endsolid")) break;
             _ = split.next(); // normal
 
-            const normal: Vector3 = .{ .x = try std.fmt.parseFloat(f32, split.next().?), .y = try std.fmt.parseFloat(f32, split.next().?), .z = try std.fmt.parseFloat(f32, split.next().?) };
+            const normal: Vector3 = .{
+                .x = try std.fmt.parseFloat(f32, split.next().?),
+                .y = try std.fmt.parseFloat(f32, split.next().?),
+                .z = try std.fmt.parseFloat(f32, split.next().?),
+            };
+
             try normals.append(alloc, normal);
         }
 
