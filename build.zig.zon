@@ -1,7 +1,7 @@
 .{
-    .name = .ztloader,
+    .name = .three,
     .version = "0.0.1",
     .minimum_zig_version = "0.16.0",
     .paths = .{""},
-    .fingerprint = 0x4e04f5dc18421594,
+    .fingerprint = 0x46c5d8f5873aaabd,
 }

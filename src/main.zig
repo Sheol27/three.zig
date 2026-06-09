@@ -3,8 +3,8 @@ const math = std.math;
 const Io = std.Io;
 const path = std.fs.path;
 
-const ztloader = @import("ztloader");
-const Mesh = ztloader.Mesh;
+const three = @import("three");
+const Mesh = three.Mesh;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
