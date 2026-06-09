@@ -19,11 +19,9 @@ pub fn build(b: *std.Build) void {
             .strip = optimize != .Debug,
             .single_threaded = true,
             .imports = &.{
-                .{.name = "three",
-                  .module = mod
-                }
-            }
-        })
+                .{ .name = "three", .module = mod },
+            },
+        }),
     });
 
     b.installArtifact(exe);
@@ -39,7 +37,6 @@ pub fn build(b: *std.Build) void {
         run_exe.addArgs(args);
     }
     run_step.dependOn(&run_exe.step);
-
 
     const mod_tests = b.addTest(.{ .root_module = mod });
     const run_mod_tests = b.addRunArtifact(mod_tests);
