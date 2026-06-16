@@ -151,10 +151,56 @@ pub fn deinit(self: *const Mesh, alloc: Allocator) void {
 
 pub fn computeBoundingBox(self: *const Mesh) BoundingBox {
     var min: Vector3 = .splat(std.math.floatMax(f32));
-    var max: Vector3 = .splat(std.math.floatMin(f32));
+    var max: Vector3 = .splat(-std.math.floatMax(f32));
     for (self.vertices) |v| {
         max = max.max(v);
         min = min.min(v);
     }
     return .{ .min = min, .max = max };
+}
+
+test "computeBoundingBox spans every vertex" {
+    var vertices = [_]Vector3{
+        .init(0, 0, 0),
+        .init(1, 2, 3),
+        .init(-1, 5, 2),
+    };
+    const mesh: Mesh = .{
+        .vertices = &vertices,
+        .indices = &[_]usize{},
+        .normals = &[_]Vector3{},
+        .triangles_count = 0,
+    };
+    const bb = mesh.computeBoundingBox();
+    try std.testing.expect(bb.min.eql(.init(-1, 0, 0)));
+    try std.testing.expect(bb.max.eql(.init(1, 5, 3)));
+}
+
+test "computeBoundingBox handles meshes entirely in negative space" {
+    var vertices = [_]Vector3{
+        .init(-3, -3, -3),
+        .init(-1, -2, -5),
+    };
+    const mesh: Mesh = .{
+        .vertices = &vertices,
+        .indices = &[_]usize{},
+        .normals = &[_]Vector3{},
+        .triangles_count = 0,
+    };
+    const bb = mesh.computeBoundingBox();
+    try std.testing.expect(bb.min.eql(.init(-3, -3, -5)));
+    try std.testing.expect(bb.max.eql(.init(-1, -2, -3)));
+}
+
+test "computeBoundingBox of a single vertex is degenerate" {
+    var vertices = [_]Vector3{.init(2, -4, 6)};
+    const mesh: Mesh = .{
+        .vertices = &vertices,
+        .indices = &[_]usize{},
+        .normals = &[_]Vector3{},
+        .triangles_count = 0,
+    };
+    const bb = mesh.computeBoundingBox();
+    try std.testing.expect(bb.min.eql(.init(2, -4, 6)));
+    try std.testing.expect(bb.max.eql(.init(2, -4, 6)));
 }
