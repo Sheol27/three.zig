@@ -5,6 +5,7 @@ const Vector3 = math.Vector3;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
+const Builder = @import("Builder.zig");
 
 pub const Mesh = @This();
 
@@ -31,16 +32,11 @@ pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
     // skip header
     _ = try r.takeDelimiter('\n');
 
-    const triangles_count = 1000;
-    var vertices: ArrayList(Vector3) = try .initCapacity(alloc, triangles_count * 3);
-    errdefer vertices.deinit(alloc);
-    var normals: ArrayList(Vector3) = try .initCapacity(alloc, triangles_count);
-    errdefer normals.deinit(alloc);
-    var indices: ArrayList(usize) = try .initCapacity(alloc, triangles_count * 3);
-    errdefer indices.deinit(alloc);
+    var builder: Builder = .init();
+    errdefer builder.deinit(alloc);
 
-    var hm: std.AutoHashMap([12]u8, usize) = .init(alloc);
-    defer hm.deinit();
+    var vertices: [3]Vector3 = undefined;
+    var normal: Vector3 = .zero;
 
     while (true) {
         if (try r.takeDelimiter('\n')) |nl| {
@@ -49,49 +45,35 @@ pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
             if (std.mem.eql(u8, h, "endsolid")) break;
             _ = split.next(); // normal
 
-            const normal: Vector3 = .{
+            normal = .{
                 .x = try std.fmt.parseFloat(f32, split.next().?),
                 .y = try std.fmt.parseFloat(f32, split.next().?),
                 .z = try std.fmt.parseFloat(f32, split.next().?),
             };
-
-            try normals.append(alloc, normal);
         }
 
         _ = try r.takeDelimiter('\n'); // outer loop
 
-        for (0..3) |_| {
+        for (0..3) |i| {
             const nl = (try r.takeDelimiter('\n')) orelse return error.UnexpectedEof;
             var split = std.mem.tokenizeAny(u8, nl, " \t\r");
             _ = split.next(); // vertex
 
-            const vertex: Vector3 = .{
+            vertices[i] = .{
                 .x = try std.fmt.parseFloat(f32, split.next().?),
                 .y = try std.fmt.parseFloat(f32, split.next().?),
                 .z = try std.fmt.parseFloat(f32, split.next().?),
             };
-
-            const key: [12]u8 = @bitCast(vertex);
-            const gop = try hm.getOrPut(key);
-            if (!gop.found_existing) {
-                gop.value_ptr.* = vertices.items.len;
-                try vertices.append(alloc, vertex);
-            }
-            try indices.append(alloc, gop.value_ptr.*);
         }
+
+        try builder.addTriangle(alloc, vertices[0], vertices[1], vertices[2], normal);
 
         _ = try r.takeDelimiter('\n'); // endloop
         _ = try r.takeDelimiter('\n'); // endfacet
 
     }
 
-    const verts = try vertices.toOwnedSlice(alloc);
-    errdefer alloc.free(verts);
-    const inds = try indices.toOwnedSlice(alloc);
-    errdefer alloc.free(inds);
-    const norms = try normals.toOwnedSlice(alloc);
-
-    return .{ .vertices = verts, .indices = inds, .normals = norms, .triangles_count = norms.len };
+    return builder.toMesh(alloc);
 }
 
 /// Parse a binary STL from any reader.
@@ -100,41 +82,24 @@ pub fn parseBinary(r: *Io.Reader, alloc: Allocator) !Mesh {
     _ = try r.discard(.limited(80));
     const triangles_count: usize = try r.takeInt(u32, .little);
 
-    var vertices: ArrayList(Vector3) = try .initCapacity(alloc, triangles_count * 3);
-    errdefer vertices.deinit(alloc);
-    var normals: ArrayList(Vector3) = try .initCapacity(alloc, triangles_count);
-    errdefer normals.deinit(alloc);
-    var indices: ArrayList(usize) = try .initCapacity(alloc, triangles_count * 3);
-    errdefer indices.deinit(alloc);
+    var builder: Builder = try .initCapacity(alloc, triangles_count);
+    errdefer builder.deinit(alloc);
 
-    var hm: std.AutoHashMap([12]u8, usize) = .init(alloc);
-    defer hm.deinit();
-    try hm.ensureTotalCapacity(@intCast(triangles_count * 3));
+    var vertices: [3]Vector3 = undefined;
 
     for (0..triangles_count) |_| {
         const nb: [12]u8 = (try r.takeArray(12)).*;
         const normal: Vector3 = @bitCast(nb);
-        for (0..3) |_| {
+        for (0..3) |i| {
             const vb: [12]u8 = (try r.takeArray(12)).*;
-            const gop = hm.getOrPutAssumeCapacity(vb);
-            if (!gop.found_existing) {
-                gop.value_ptr.* = vertices.items.len;
-                vertices.appendAssumeCapacity(@bitCast(vb));
-            }
-            indices.appendAssumeCapacity(gop.value_ptr.*);
+            vertices[i] = @bitCast(vb);
         }
         // skip attribute bytes
         _ = try r.discard(.limited(2));
-        normals.appendAssumeCapacity(normal);
+        try builder.addTriangle(alloc, vertices[0], vertices[1], vertices[2], normal);
     }
 
-    const verts = try vertices.toOwnedSlice(alloc);
-    errdefer alloc.free(verts);
-    const inds = try indices.toOwnedSlice(alloc);
-    errdefer alloc.free(inds);
-    const norms = try normals.toOwnedSlice(alloc);
-
-    return .{ .vertices = verts, .indices = inds, .normals = norms, .triangles_count = triangles_count };
+    return builder.toMesh(alloc);
 }
 
 /// Open a file by path and parse it.
