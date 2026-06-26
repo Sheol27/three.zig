@@ -13,6 +13,10 @@ indices: []usize,
 normals: []Vector3,
 triangles_count: usize,
 
+pub fn getTriangle(self: *const Mesh, index: usize) [3]Vector3 {
+    return .{ self.vertices[self.indices[index]], self.vertices[self.indices[index + 1]], self.vertices[self.indices[index + 2]] };
+}
+
 /// Parse an STL from any reader. It automatically detects beteen ascii and binary
 pub fn fromReader(r: *Io.Reader, alloc: Allocator) !Mesh {
     const head = try r.peek(5);
@@ -204,3 +208,199 @@ test "computeBoundingBox of a single vertex is degenerate" {
     try std.testing.expect(bb.min.eql(.init(2, -4, 6)));
     try std.testing.expect(bb.max.eql(.init(2, -4, 6)));
 }
+
+test "parseAscii reads a single triangle" {
+    const alloc = std.testing.allocator;
+    const stl =
+        \\solid tri
+        \\facet normal 1 0 0
+        \\  outer loop
+        \\    vertex 0 0 5
+        \\    vertex 1 0 3
+        \\    vertex 0 1 2
+        \\  endloop
+        \\endfacet
+        \\endsolid tri
+        \\
+    ;
+    var r: Io.Reader = .fixed(stl);
+    const mesh = try parseAscii(&r, alloc);
+    defer mesh.deinit(alloc);
+
+    try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
+    try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
+    try std.testing.expectEqual(@as(usize, 3), mesh.indices.len);
+    try std.testing.expectEqual(@as(usize, 1), mesh.normals.len);
+
+    try std.testing.expect(mesh.normals[0].eql(.init(1, 0, 0)));
+
+    const t = mesh.getTriangle(0);
+    try std.testing.expect(t[0].eql(.init(0, 0, 5)));
+    try std.testing.expect(t[1].eql(.init(1, 0, 3)));
+    try std.testing.expect(t[2].eql(.init(0, 1, 2)));
+}
+
+test "parseAscii deduplicates vertices shared between triangles" {
+    const alloc = std.testing.allocator;
+    const stl =
+        \\solid quad
+        \\facet normal 0 0 1
+        \\  outer loop
+        \\    vertex 0 0 0
+        \\    vertex 1 0 0
+        \\    vertex 1 1 0
+        \\  endloop
+        \\endfacet
+        \\facet normal 0 0 1
+        \\  outer loop
+        \\    vertex 0 0 0
+        \\    vertex 1 1 0
+        \\    vertex 0 1 0
+        \\  endloop
+        \\endfacet
+        \\endsolid quad
+        \\
+    ;
+    var r: Io.Reader = .fixed(stl);
+    const mesh = try parseAscii(&r, alloc);
+    defer mesh.deinit(alloc);
+
+    try std.testing.expectEqual(@as(usize, 2), mesh.triangles_count);
+    try std.testing.expectEqual(@as(usize, 4), mesh.vertices.len);
+    try std.testing.expectEqualSlices(usize, &.{ 0, 1, 2, 0, 2, 3 }, mesh.indices);
+}
+
+test "parseAscii tolerates CRLF line endings" {
+    const alloc = std.testing.allocator;
+    const stl =
+        "solid tri\r\n" ++
+        "facet normal 0 0 1\r\n" ++
+        "  outer loop\r\n" ++
+        "    vertex 0 0 0\r\n" ++
+        "    vertex 1 0 0\r\n" ++
+        "    vertex 0 1 0\r\n" ++
+        "  endloop\r\n" ++
+        "endfacet\r\n" ++
+        "endsolid tri\r\n";
+    var r: Io.Reader = .fixed(stl);
+    const mesh = try parseAscii(&r, alloc);
+    defer mesh.deinit(alloc);
+
+    try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
+    try std.testing.expect(mesh.normals[0].eql(.init(0, 0, 1)));
+    try std.testing.expect(mesh.getTriangle(0)[1].eql(.init(1, 0, 0)));
+}
+
+test "parseAscii returns error on a truncated triangle" {
+    const alloc = std.testing.allocator;
+    const stl =
+        \\solid tri
+        \\facet normal 0 0 1
+        \\  outer loop
+        \\    vertex 0 0 0
+    ;
+    var r: Io.Reader = .fixed(stl);
+    try std.testing.expectError(error.UnexpectedEof, parseAscii(&r, alloc));
+}
+
+test "parseBinary reads a single triangle" {
+    const alloc = std.testing.allocator;
+    const stl =
+        [_]u8{0} ** 80 ++ // header
+        le.u32Bytes(1) ++ // triangle count
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(1) ++ // normal
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v0
+        le.f32Bytes(1) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v1
+        le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v2
+        [_]u8{ 0, 0 }; // attribute byte count
+    var r: Io.Reader = .fixed(&stl);
+    const mesh = try parseBinary(&r, alloc);
+    defer mesh.deinit(alloc);
+
+    try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
+    try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
+    try std.testing.expectEqual(@as(usize, 1), mesh.normals.len);
+
+    try std.testing.expect(mesh.normals[0].eql(.init(0, 0, 1)));
+    const t = mesh.getTriangle(0);
+    try std.testing.expect(t[0].eql(.init(0, 0, 0)));
+    try std.testing.expect(t[1].eql(.init(1, 0, 0)));
+    try std.testing.expect(t[2].eql(.init(0, 1, 0)));
+}
+
+test "parseBinary deduplicates vertices shared between triangles" {
+    const alloc = std.testing.allocator;
+    const stl =
+        [_]u8{0} ** 80 ++
+        le.u32Bytes(2) ++
+        // triangle 1
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(1) ++ // normal
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v0
+        le.f32Bytes(1) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v1
+        le.f32Bytes(1) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v2
+        [_]u8{ 0, 0 } ++
+        // triangle 2
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(1) ++ // normal
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v0
+        le.f32Bytes(1) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v1
+        le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v2
+        [_]u8{ 0, 0 };
+    var r: Io.Reader = .fixed(&stl);
+    const mesh = try parseBinary(&r, alloc);
+    defer mesh.deinit(alloc);
+
+    try std.testing.expectEqual(@as(usize, 2), mesh.triangles_count);
+    try std.testing.expectEqual(@as(usize, 4), mesh.vertices.len);
+    try std.testing.expectEqualSlices(usize, &.{ 0, 1, 2, 0, 2, 3 }, mesh.indices);
+}
+
+test "fromReader auto-detects an ascii STL" {
+    const alloc = std.testing.allocator;
+    const stl =
+        \\solid tri
+        \\facet normal 0 0 1
+        \\  outer loop
+        \\    vertex 0 0 0
+        \\    vertex 1 0 0
+        \\    vertex 0 1 0
+        \\  endloop
+        \\endfacet
+        \\endsolid tri
+        \\
+    ;
+    var r: Io.Reader = .fixed(stl);
+    const mesh = try fromReader(&r, alloc);
+    defer mesh.deinit(alloc);
+    try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
+    try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
+}
+
+test "fromReader auto-detects a binary STL" {
+    const alloc = std.testing.allocator;
+    const stl =
+        [_]u8{0} ** 80 ++ // header does not begin with "solid"
+        le.u32Bytes(1) ++
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(1) ++
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++
+        le.f32Bytes(1) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++
+        le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++
+        [_]u8{ 0, 0 };
+    var r: Io.Reader = .fixed(&stl);
+    const mesh = try fromReader(&r, alloc);
+    defer mesh.deinit(alloc);
+    try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
+    try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
+}
+
+const le = struct {
+    fn f32Bytes(v: f32) [4]u8 {
+        var b: [4]u8 = undefined;
+        std.mem.writeInt(u32, &b, @bitCast(v), .little);
+        return b;
+    }
+    fn u32Bytes(v: u32) [4]u8 {
+        var b: [4]u8 = undefined;
+        std.mem.writeInt(u32, &b, v, .little);
+        return b;
+    }
+};
