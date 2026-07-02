@@ -15,6 +15,8 @@ Requires Zig `0.16.0`.
 - More loaders: OBJ, PLY, glTF...
 - Writers for supported formats
 - Mesh processing: normals, transforms, simplification, validation
+- Compile to C compatible library
+- Compile to Wasm with JS glue
 
 ## Install
 
