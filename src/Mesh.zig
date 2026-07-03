@@ -9,6 +9,12 @@ const Builder = @import("Builder.zig");
 
 pub const Mesh = @This();
 
+/// Serialization format used when writing a mesh as STL.
+pub const StlFormat = enum {
+    ascii,
+    binary,
+};
+
 vertices: []Vector3,
 indices: []usize,
 normals: []Vector3,
@@ -27,7 +33,7 @@ pub fn fromReader(r: *Io.Reader, alloc: Allocator) !Mesh {
         parseBinary(r, alloc);
 }
 
-// Parse an ascii STL from any reader.
+/// Parse an ascii STL from any reader.
 pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
     // skip header
     _ = try r.takeDelimiter('\n');
@@ -110,6 +116,61 @@ pub fn fromFile(io: Io, alloc: Allocator, path: []const u8) !Mesh {
     var buffer: [1024 * 128]u8 = undefined;
     var reader = file.reader(io, &buffer);
     return fromReader(&reader.interface, alloc);
+}
+
+/// Create the file at `path` and write the mesh to it as STL
+pub fn toFile(self: *const Mesh, io: Io, path: []const u8, format: StlFormat) !void {
+    const dir = Io.Dir.cwd();
+    var file = try dir.createFile(io, path, .{});
+    defer file.close(io);
+
+    var buffer: [1024 * 128]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+
+    const w: *Io.Writer = &writer.interface;
+    defer w.flush() catch {};
+
+    return self.toWriter(w, format);
+}
+
+/// Write the mesh as STL to any writer in the given format.
+pub fn toWriter(self: *const Mesh, w: *Io.Writer, format: StlFormat) !void {
+    return switch (format) {
+        .binary => self.writeBinary(w),
+        .ascii => self.writeAscii(w),
+    };
+}
+
+/// Write the mesh as an ascii
+pub fn writeAscii(self: *const Mesh, w: *Io.Writer) !void {
+    try w.writeAll("solid mesh\n");
+    for (0..self.triangles_count) |t| {
+        const n = self.normals[t];
+        try w.print("  facet normal {d} {d} {d}\n", .{ n.x, n.y, n.z });
+        try w.writeAll("    outer loop\n");
+        for (0..3) |k| {
+            const v = self.vertices[self.indices[t * 3 + k]];
+            try w.print("      vertex {d} {d} {d}\n", .{ v.x, v.y, v.z });
+        }
+        try w.writeAll("    endloop\n");
+        try w.writeAll("  endfacet\n");
+    }
+    try w.writeAll("endsolid mesh\n");
+}
+
+/// Write the mesh as a binary STL
+pub fn writeBinary(self: *const Mesh, w: *Io.Writer) !void {
+    try w.writeAll(&[_]u8{0} ** 80); // header
+    try w.writeInt(u32, @intCast(self.triangles_count), .little);
+
+    for (0..self.triangles_count) |t| {
+        try w.writeStruct(self.normals[t], .little);
+        try w.writeStruct(self.vertices[self.indices[t * 3]], .little);
+        try w.writeStruct(self.vertices[self.indices[t * 3 + 1]], .little);
+        try w.writeStruct(self.vertices[self.indices[t * 3 + 2]], .little);
+
+        try w.writeAll(&[_]u8{0} ** 2); // attribute
+    }
 }
 
 pub fn deinit(self: *const Mesh, alloc: Allocator) void {
@@ -355,6 +416,133 @@ test "fromReader auto-detects a binary STL" {
     defer mesh.deinit(alloc);
     try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
     try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
+}
+
+test "writeAscii emits a well-formed ascii STL" {
+    var vertices = [_]Vector3{ .init(0, 0, 0), .init(1, 0, 0), .init(0, 1, 0) };
+    var indices = [_]usize{ 0, 1, 2 };
+    var normals = [_]Vector3{.init(0, 0, 1)};
+    const mesh: Mesh = .{
+        .vertices = &vertices,
+        .indices = &indices,
+        .normals = &normals,
+        .triangles_count = 1,
+    };
+
+    var buf: [512]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try mesh.writeAscii(&w);
+
+    const expected =
+        \\solid mesh
+        \\  facet normal 0 0 1
+        \\    outer loop
+        \\      vertex 0 0 0
+        \\      vertex 1 0 0
+        \\      vertex 0 1 0
+        \\    endloop
+        \\  endfacet
+        \\endsolid mesh
+        \\
+    ;
+    try std.testing.expectEqualStrings(expected, w.buffered());
+}
+
+test "writeAscii preserves fractional and negative coordinates" {
+    const alloc = std.testing.allocator;
+    var vertices = [_]Vector3{ .init(-0.5, 0.25, 1.5), .init(2.5, -1.25, 0), .init(0, 3.75, -2) };
+    var indices = [_]usize{ 0, 1, 2 };
+    var normals = [_]Vector3{.init(0, 0, -1)};
+    const mesh: Mesh = .{
+        .vertices = &vertices,
+        .indices = &indices,
+        .normals = &normals,
+        .triangles_count = 1,
+    };
+
+    var buf: [512]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try mesh.writeAscii(&w);
+
+    var r: Io.Reader = .fixed(w.buffered());
+    const parsed = try parseAscii(&r, alloc);
+    defer parsed.deinit(alloc);
+
+    try std.testing.expect(parsed.normals[0].eql(.init(0, 0, -1)));
+    const t = parsed.getTriangle(0);
+    try std.testing.expect(t[0].eql(.init(-0.5, 0.25, 1.5)));
+    try std.testing.expect(t[1].eql(.init(2.5, -1.25, 0)));
+    try std.testing.expect(t[2].eql(.init(0, 3.75, -2)));
+}
+
+test "writeBinary emits the exact STL byte layout" {
+    var vertices = [_]Vector3{ .init(0, 0, 0), .init(1, 0, 0), .init(0, 1, 0) };
+    var indices = [_]usize{ 0, 1, 2 };
+    var normals = [_]Vector3{.init(0, 0, 1)};
+    const mesh: Mesh = .{
+        .vertices = &vertices,
+        .indices = &indices,
+        .normals = &normals,
+        .triangles_count = 1,
+    };
+
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try mesh.writeBinary(&w);
+
+    const expected =
+        [_]u8{0} ** 80 ++ // header
+        le.u32Bytes(1) ++ // triangle count
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(1) ++ // normal
+        le.f32Bytes(0) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v0
+        le.f32Bytes(1) ++ le.f32Bytes(0) ++ le.f32Bytes(0) ++ // v1
+        le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v2
+        [_]u8{ 0, 0 }; // attribute byte count
+    try std.testing.expectEqualSlices(u8, &expected, w.buffered());
+}
+
+test "toWriter ascii output round-trips through fromReader" {
+    const primitives = @import("primitives.zig");
+    const alloc = std.testing.allocator;
+    const cube = try primitives.cube(alloc, 2);
+    defer cube.deinit(alloc);
+
+    var buf: [8192]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try cube.toWriter(&w, .ascii);
+
+    var r: Io.Reader = .fixed(w.buffered());
+    const parsed = try fromReader(&r, alloc);
+    defer parsed.deinit(alloc);
+
+    try expectMeshesEqual(cube, parsed);
+}
+
+test "toWriter binary output round-trips through fromReader" {
+    const primitives = @import("primitives.zig");
+    const alloc = std.testing.allocator;
+    const cube = try primitives.cube(alloc, 2);
+    defer cube.deinit(alloc);
+
+    var buf: [1024]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try cube.toWriter(&w, .binary);
+
+    try std.testing.expectEqual(84 + 50 * cube.triangles_count, w.buffered().len);
+
+    var r: Io.Reader = .fixed(w.buffered());
+    const parsed = try fromReader(&r, alloc);
+    defer parsed.deinit(alloc);
+
+    try expectMeshesEqual(cube, parsed);
+}
+
+fn expectMeshesEqual(expected: Mesh, actual: Mesh) !void {
+    try std.testing.expectEqual(expected.triangles_count, actual.triangles_count);
+    try std.testing.expectEqualSlices(usize, expected.indices, actual.indices);
+    try std.testing.expectEqual(expected.vertices.len, actual.vertices.len);
+    for (expected.vertices, actual.vertices) |e, a| try std.testing.expect(e.eql(a));
+    for (expected.normals, actual.normals) |e, a| try std.testing.expect(e.eql(a));
 }
 
 const le = struct {
