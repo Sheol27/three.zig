@@ -1,3 +1,4 @@
+const std = @import("std");
 const math = @import("math.zig");
 const Vector3 = math.Vector3;
 
@@ -15,3 +16,16 @@ pub fn triangleNormal(a: Vector3, b: Vector3, c: Vector3) Vector3 {
 
     return n;
 }
+
+pub const le = struct {
+    pub fn f32Bytes(v: f32) [4]u8 {
+        var b: [4]u8 = undefined;
+        std.mem.writeInt(u32, &b, @bitCast(v), .little);
+        return b;
+    }
+    pub fn u32Bytes(v: u32) [4]u8 {
+        var b: [4]u8 = undefined;
+        std.mem.writeInt(u32, &b, v, .little);
+        return b;
+    }
+};

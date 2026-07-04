@@ -46,18 +46,23 @@ const three = @import("three");
 pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
 
-    const mesh: three.Mesh = try .fromFile(init.io, allocator, "model.stl");
+    // Format inferred from the extension
+    const mesh: three.Mesh = try three.formats.load(init.io, allocator, "model.stl");
     defer mesh.deinit(allocator);
 
     std.debug.print("triangles: {}\n", .{mesh.triangles_count});
 
     const bb = mesh.computeBoundingBox();
     std.debug.print("center: {any}\n", .{bb.center()});
+
+    // Format-specific options ride in the union payload
+    try three.formats.save(&mesh, init.io, "out.stl", .{ .stl = .{ .encoding = .ascii } });
 }
 ```
 
-You can also parse from any `std.Io.Reader` via `Mesh.fromReader`, or
-explicitly call `Mesh.parseAscii` / `Mesh.parseBinary`.
+You can also parse from any `std.Io.Reader` via `formats.loadFromReader`, or use a
+format directly: `formats.Stl.loadFromReader` (auto-detects ascii/binary),
+`formats.Stl.parseAscii` / `parseBinary`, `formats.Stl.saveToWriter`.
 
 ## Example
 
