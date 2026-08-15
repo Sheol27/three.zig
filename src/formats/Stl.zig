@@ -91,11 +91,9 @@ pub fn readBinary(r: *Io.Reader, alloc: Allocator) !Mesh {
     var vertices: [3]Vector3 = undefined;
 
     for (0..triangles_count) |_| {
-        const nb: [12]u8 = (try r.takeArray(12)).*;
-        const normal: Vector3 = @bitCast(nb);
+        const normal = try r.takeStruct(Vector3, .little);
         for (0..3) |i| {
-            const vb: [12]u8 = (try r.takeArray(12)).*;
-            vertices[i] = @bitCast(vb);
+            vertices[i] = try r.takeStruct(Vector3, .little);
         }
         // skip attribute bytes
         _ = try r.discard(.limited(2));
