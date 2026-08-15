@@ -16,6 +16,16 @@ pub const Format = enum {
     }
 };
 
+pub const ReadOptions = union(Format) {
+    stl: Stl.ReadOptions,
+
+    pub fn fromPath(path: []const u8) ?ReadOptions {
+        return switch (Format.fromPath(path) orelse return null) {
+            .stl => .{ .stl = .{} },
+        };
+    }
+};
+
 pub const WriteOptions = union(Format) {
     stl: Stl.WriteOptions,
 
@@ -26,23 +36,22 @@ pub const WriteOptions = union(Format) {
     }
 };
 
-/// Parse a mesh in the given format from any reader.
-pub fn loadFromReader(r: *Io.Reader, alloc: Allocator, format: Format) !Mesh {
-    return switch (format) {
+/// Parse a mesh from any reader, in the format given by the options.
+pub fn loadFromReader(r: *Io.Reader, alloc: Allocator, options: ReadOptions) !Mesh {
+    return switch (options) {
         .stl => Stl.loadFromReader(r, alloc),
     };
 }
 
-/// Open the file and parse it, inferring the format from its extension.
-pub fn load(io: Io, alloc: Allocator, path: []const u8) !Mesh {
-    const format = Format.fromPath(path) orelse return error.UnknownFormat;
-
+/// Open the file and parse it. Use `ReadOptions.fromPath` to infer the format
+/// from the extension.
+pub fn load(io: Io, alloc: Allocator, path: []const u8, options: ReadOptions) !Mesh {
     var file = try Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
 
     var buffer: [1024 * 128]u8 = undefined;
     var reader = file.reader(io, &buffer);
-    return loadFromReader(&reader.interface, alloc, format);
+    return loadFromReader(&reader.interface, alloc, options);
 }
 
 /// Write the mesh to any writer.
@@ -81,7 +90,7 @@ test "saveToWriter output round-trips through loadFromReader" {
     try saveToWriter(&cube, &w, .{ .stl = .{ .encoding = .ascii } });
 
     var r: Io.Reader = .fixed(w.buffered());
-    const parsed = try loadFromReader(&r, alloc, .stl);
+    const parsed = try loadFromReader(&r, alloc, .{ .stl = .{} });
     defer parsed.deinit(alloc);
 
     try std.testing.expectEqual(cube.triangles_count, parsed.triangles_count);

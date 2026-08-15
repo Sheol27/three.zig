@@ -13,6 +13,8 @@ pub const Encoding = enum {
     binary,
 };
 
+pub const ReadOptions = struct {};
+
 pub const WriteOptions = struct {
     encoding: Encoding = .binary,
     /// Solid name emitted in ascii output.

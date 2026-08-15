@@ -46,8 +46,8 @@ const three = @import("three");
 pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
 
-    // Format inferred from the extension
-    const mesh: three.Mesh = try three.formats.load(init.io, allocator, "model.stl");
+    // The format is explicit; `ReadOptions.fromPath` can infer it from the extension
+    const mesh: three.Mesh = try three.formats.load(init.io, allocator, "model.stl", .{ .stl = .{} });
     defer mesh.deinit(allocator);
 
     std.debug.print("triangles: {}\n", .{mesh.triangles_count});
