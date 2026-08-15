@@ -15,7 +15,7 @@ pub fn main(init: std.process.Init) !void {
     const options = three.formats.ReadOptions.fromPath(input_path) orelse
         std.process.fatal("Unknown format: {s}", .{input_path});
 
-    const mesh: three.Mesh = try three.formats.load(init.io, allocator, input_path, options);
+    const mesh: three.Mesh = try three.formats.readFile(init.io, allocator, input_path, options);
     defer mesh.deinit(allocator);
 
     print("Loaded {} faces with {} vertices and {} indices\n", .{ mesh.triangles_count, mesh.vertices.len, mesh.indices.len });

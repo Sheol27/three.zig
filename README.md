@@ -47,7 +47,7 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
 
     // The format is explicit; `ReadOptions.fromPath` can infer it from the extension
-    const mesh: three.Mesh = try three.formats.load(init.io, allocator, "model.stl", .{ .stl = .{} });
+    const mesh: three.Mesh = try three.formats.readFile(init.io, allocator, "model.stl", .{ .stl = .{} });
     defer mesh.deinit(allocator);
 
     std.debug.print("triangles: {}\n", .{mesh.triangles_count});
@@ -56,13 +56,13 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("center: {any}\n", .{bb.center()});
 
     // Format-specific options ride in the union payload
-    try three.formats.save(&mesh, init.io, "out.stl", .{ .stl = .{ .encoding = .ascii } });
+    try three.formats.writeFile(&mesh, init.io, "out.stl", .{ .stl = .{ .encoding = .ascii } });
 }
 ```
 
-You can also parse from any `std.Io.Reader` via `formats.loadFromReader`, or use a
-format directly: `formats.Stl.loadFromReader` (auto-detects ascii/binary),
-`formats.Stl.parseAscii` / `parseBinary`, `formats.Stl.saveToWriter`.
+You can also read from any `std.Io.Reader` via `formats.read` and write to any
+`std.Io.Writer` via `formats.write`, or use a format directly: `formats.Stl.read`
+(auto-detects ascii/binary), `formats.Stl.readAscii` / `readBinary`, `formats.Stl.write`.
 
 ## Example
 

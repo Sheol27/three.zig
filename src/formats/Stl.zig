@@ -21,17 +21,17 @@ pub const WriteOptions = struct {
     name: []const u8 = "mesh",
 };
 
-/// Parse an STL from any reader. It automatically detects beteen ascii and binary
-pub fn loadFromReader(r: *Io.Reader, alloc: Allocator) !Mesh {
+/// Parse an STL from any reader. It automatically detects between ascii and binary
+pub fn read(r: *Io.Reader, alloc: Allocator) !Mesh {
     const head = try r.peek(5);
     return if (std.mem.eql(u8, head, "solid"))
-        parseAscii(r, alloc)
+        readAscii(r, alloc)
     else
-        parseBinary(r, alloc);
+        readBinary(r, alloc);
 }
 
 /// Parse an ascii STL from any reader.
-pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
+pub fn readAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
     // skip header
     _ = try r.takeDelimiter('\n');
 
@@ -80,7 +80,7 @@ pub fn parseAscii(r: *Io.Reader, alloc: Allocator) !Mesh {
 }
 
 /// Parse a binary STL from any reader.
-pub fn parseBinary(r: *Io.Reader, alloc: Allocator) !Mesh {
+pub fn readBinary(r: *Io.Reader, alloc: Allocator) !Mesh {
     // skip header
     _ = try r.discard(.limited(80));
     const triangles_count: usize = try r.takeInt(u32, .little);
@@ -106,7 +106,7 @@ pub fn parseBinary(r: *Io.Reader, alloc: Allocator) !Mesh {
 }
 
 /// Write the mesh as STL to any writer.
-pub fn saveToWriter(mesh: *const Mesh, w: *Io.Writer, options: WriteOptions) !void {
+pub fn write(mesh: *const Mesh, w: *Io.Writer, options: WriteOptions) !void {
     return switch (options.encoding) {
         .ascii => writeAscii(mesh, w, options),
         .binary => writeBinary(mesh, w),
@@ -143,7 +143,7 @@ pub fn writeBinary(mesh: *const Mesh, w: *Io.Writer) !void {
     }
 }
 
-test "loadFromReader auto-detects an ascii STL" {
+test "read auto-detects an ascii STL" {
     const alloc = std.testing.allocator;
     const stl_ascii =
         \\solid tri
@@ -158,13 +158,13 @@ test "loadFromReader auto-detects an ascii STL" {
         \\
     ;
     var r: Io.Reader = .fixed(stl_ascii);
-    const mesh = try loadFromReader(&r, alloc);
+    const mesh = try read(&r, alloc);
     defer mesh.deinit(alloc);
     try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
     try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
 }
 
-test "loadFromReader auto-detects a binary STL" {
+test "read auto-detects a binary STL" {
     const alloc = std.testing.allocator;
     const stl_binary =
         [_]u8{0} ** 80 ++ // header does not begin with "solid"
@@ -175,13 +175,13 @@ test "loadFromReader auto-detects a binary STL" {
         le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++
         [_]u8{ 0, 0 };
     var r: Io.Reader = .fixed(&stl_binary);
-    const mesh = try loadFromReader(&r, alloc);
+    const mesh = try read(&r, alloc);
     defer mesh.deinit(alloc);
     try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
     try std.testing.expectEqual(@as(usize, 3), mesh.vertices.len);
 }
 
-test "parseAscii reads a single triangle" {
+test "readAscii reads a single triangle" {
     const alloc = std.testing.allocator;
     const stl =
         \\solid tri
@@ -196,7 +196,7 @@ test "parseAscii reads a single triangle" {
         \\
     ;
     var r: Io.Reader = .fixed(stl);
-    const mesh = try parseAscii(&r, alloc);
+    const mesh = try readAscii(&r, alloc);
     defer mesh.deinit(alloc);
 
     try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
@@ -212,7 +212,7 @@ test "parseAscii reads a single triangle" {
     try std.testing.expect(t[2].eql(.init(0, 1, 2)));
 }
 
-test "parseAscii deduplicates vertices shared between triangles" {
+test "readAscii deduplicates vertices shared between triangles" {
     const alloc = std.testing.allocator;
     const stl =
         \\solid quad
@@ -234,7 +234,7 @@ test "parseAscii deduplicates vertices shared between triangles" {
         \\
     ;
     var r: Io.Reader = .fixed(stl);
-    const mesh = try parseAscii(&r, alloc);
+    const mesh = try readAscii(&r, alloc);
     defer mesh.deinit(alloc);
 
     try std.testing.expectEqual(@as(usize, 2), mesh.triangles_count);
@@ -242,7 +242,7 @@ test "parseAscii deduplicates vertices shared between triangles" {
     try std.testing.expectEqualSlices(usize, &.{ 0, 1, 2, 0, 2, 3 }, mesh.indices);
 }
 
-test "parseAscii tolerates CRLF line endings" {
+test "readAscii tolerates CRLF line endings" {
     const alloc = std.testing.allocator;
     const stl =
         "solid tri\r\n" ++
@@ -255,7 +255,7 @@ test "parseAscii tolerates CRLF line endings" {
         "endfacet\r\n" ++
         "endsolid tri\r\n";
     var r: Io.Reader = .fixed(stl);
-    const mesh = try parseAscii(&r, alloc);
+    const mesh = try readAscii(&r, alloc);
     defer mesh.deinit(alloc);
 
     try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
@@ -263,7 +263,7 @@ test "parseAscii tolerates CRLF line endings" {
     try std.testing.expect(mesh.getTriangle(0)[1].eql(.init(1, 0, 0)));
 }
 
-test "parseAscii returns error on a truncated triangle" {
+test "readAscii returns error on a truncated triangle" {
     const alloc = std.testing.allocator;
     const stl =
         \\solid tri
@@ -272,10 +272,10 @@ test "parseAscii returns error on a truncated triangle" {
         \\    vertex 0 0 0
     ;
     var r: Io.Reader = .fixed(stl);
-    try std.testing.expectError(error.UnexpectedEof, parseAscii(&r, alloc));
+    try std.testing.expectError(error.UnexpectedEof, readAscii(&r, alloc));
 }
 
-test "parseBinary reads a single triangle" {
+test "readBinary reads a single triangle" {
     const alloc = std.testing.allocator;
     const stl =
         [_]u8{0} ** 80 ++ // header
@@ -286,7 +286,7 @@ test "parseBinary reads a single triangle" {
         le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v2
         [_]u8{ 0, 0 }; // attribute byte count
     var r: Io.Reader = .fixed(&stl);
-    const mesh = try parseBinary(&r, alloc);
+    const mesh = try readBinary(&r, alloc);
     defer mesh.deinit(alloc);
 
     try std.testing.expectEqual(@as(usize, 1), mesh.triangles_count);
@@ -300,7 +300,7 @@ test "parseBinary reads a single triangle" {
     try std.testing.expect(t[2].eql(.init(0, 1, 0)));
 }
 
-test "parseBinary deduplicates vertices shared between triangles" {
+test "readBinary deduplicates vertices shared between triangles" {
     const alloc = std.testing.allocator;
     const stl =
         [_]u8{0} ** 80 ++
@@ -318,7 +318,7 @@ test "parseBinary deduplicates vertices shared between triangles" {
         le.f32Bytes(0) ++ le.f32Bytes(1) ++ le.f32Bytes(0) ++ // v2
         [_]u8{ 0, 0 };
     var r: Io.Reader = .fixed(&stl);
-    const mesh = try parseBinary(&r, alloc);
+    const mesh = try readBinary(&r, alloc);
     defer mesh.deinit(alloc);
 
     try std.testing.expectEqual(@as(usize, 2), mesh.triangles_count);
@@ -392,7 +392,7 @@ test "writeAscii preserves fractional and negative coordinates" {
     try writeAscii(&mesh, &w, .{});
 
     var r: Io.Reader = .fixed(w.buffered());
-    const parsed = try parseAscii(&r, alloc);
+    const parsed = try readAscii(&r, alloc);
     defer parsed.deinit(alloc);
 
     try std.testing.expect(parsed.normals[0].eql(.init(0, 0, -1)));
@@ -428,7 +428,7 @@ test "writeBinary emits the exact STL byte layout" {
     try std.testing.expectEqualSlices(u8, &expected, w.buffered());
 }
 
-test "saveToWriter ascii output round-trips through loadFromReader" {
+test "write ascii output round-trips through read" {
     const primitives = @import("../primitives.zig");
     const alloc = std.testing.allocator;
     const cube = try primitives.cube(alloc, 2);
@@ -436,16 +436,16 @@ test "saveToWriter ascii output round-trips through loadFromReader" {
 
     var buf: [8192]u8 = undefined;
     var w: Io.Writer = .fixed(&buf);
-    try saveToWriter(&cube, &w, .{ .encoding = .ascii });
+    try write(&cube, &w, .{ .encoding = .ascii });
 
     var r: Io.Reader = .fixed(w.buffered());
-    const parsed = try loadFromReader(&r, alloc);
+    const parsed = try read(&r, alloc);
     defer parsed.deinit(alloc);
 
     try expectMeshesEqual(cube, parsed);
 }
 
-test "saveToWriter binary output round-trips through loadFromReader" {
+test "write binary output round-trips through read" {
     const primitives = @import("../primitives.zig");
     const alloc = std.testing.allocator;
     const cube = try primitives.cube(alloc, 2);
@@ -453,12 +453,12 @@ test "saveToWriter binary output round-trips through loadFromReader" {
 
     var buf: [1024]u8 = undefined;
     var w: Io.Writer = .fixed(&buf);
-    try saveToWriter(&cube, &w, .{ .encoding = .binary });
+    try write(&cube, &w, .{ .encoding = .binary });
 
     try std.testing.expectEqual(84 + 50 * cube.triangles_count, w.buffered().len);
 
     var r: Io.Reader = .fixed(w.buffered());
-    const parsed = try loadFromReader(&r, alloc);
+    const parsed = try read(&r, alloc);
     defer parsed.deinit(alloc);
 
     try expectMeshesEqual(cube, parsed);
