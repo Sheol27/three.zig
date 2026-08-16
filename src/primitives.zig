@@ -172,7 +172,7 @@ test "tetrahedron: 4 vertices, 4 triangles, outward-pointing normals" {
 
     for (0..mesh.triangles_count) |i| {
         const t = mesh.getTriangle(i);
-        const centroid = t[0].add(t[1]).add(t[2]).scale(1.0 / 3.0);
+        const centroid = t[0].add(t[1]).add(t[2]).mulScalar(1.0 / 3.0);
         try testing.expect(mesh.normals[i].dot(centroid) > 0);
         try testing.expectApproxEqAbs(@as(f32, 1), mesh.normals[i].length(), 1e-5);
     }

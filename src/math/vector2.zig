@@ -73,10 +73,6 @@ pub const Vector2 = extern struct {
         };
     }
 
-    pub fn scale(self: Vector2, s: f32) Vector2 {
-        return .{ .x = self.x * s, .y = self.y * s };
-    }
-
     pub fn negate(self: Vector2) Vector2 {
         return .{ .x = -self.x, .y = -self.y };
     }
@@ -104,7 +100,7 @@ pub const Vector2 = extern struct {
     pub fn normalize(self: Vector2) Vector2 {
         const len_sq = self.lengthSquared();
         if (len_sq == 0) return Vector2.zero;
-        return self.scale(1.0 / @sqrt(len_sq));
+        return self.mulScalar(1.0 / @sqrt(len_sq));
     }
 
     pub fn distance(self: Vector2, other: Vector2) f32 {
@@ -157,7 +153,7 @@ test "basic operations" {
     try std.testing.expect(a.add(b).eql(Vector2.init(5, 7)));
     try std.testing.expect(a.sub(b).eql(Vector2.init(-3, -3)));
     try std.testing.expectEqual(@as(f32, 14), a.dot(b));
-    try std.testing.expect(Vector2.unit_x.scale(3).normalize().eql(Vector2.unit_x));
+    try std.testing.expect(Vector2.unit_x.mulScalar(3).normalize().eql(Vector2.unit_x));
 }
 
 test "constants" {
@@ -181,10 +177,10 @@ test "componentwise mul and div" {
     try std.testing.expect(Vector2.init(6, 8).div(Vector2.init(2, 4)).eql(Vector2.init(3, 2)));
 }
 
-test "scale, negate, abs" {
+test "mulScalar, negate, abs" {
     const a = Vector2.init(1, -2);
-    try std.testing.expect(a.scale(2).eql(Vector2.init(2, -4)));
-    try std.testing.expect(a.scale(0).eql(Vector2.zero));
+    try std.testing.expect(a.mulScalar(2).eql(Vector2.init(2, -4)));
+    try std.testing.expect(a.mulScalar(0).eql(Vector2.zero));
     try std.testing.expect(a.negate().eql(Vector2.init(-1, 2)));
     try std.testing.expect(a.abs().eql(Vector2.init(1, 2)));
 }
