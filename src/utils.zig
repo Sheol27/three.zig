@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("math.zig");
-const Vector3 = math.Vector3;
+const Vector3 = math.Vector3(f32);
 
 pub fn triangleNormal(a: Vector3, b: Vector3, c: Vector3) Vector3 {
     const u = b.sub(a);

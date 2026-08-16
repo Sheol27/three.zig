@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("math.zig");
 const BoundingBox = @import("BoundingBox.zig");
-const Vector3 = math.Vector3;
+const Vector3 = math.Vector3(f32);
 const Allocator = std.mem.Allocator;
 
 pub const Mesh = @This();

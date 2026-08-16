@@ -2,7 +2,7 @@ const Builder = @This();
 
 const std = @import("std");
 const math = @import("math.zig");
-const Vector3 = math.Vector3;
+const Vector3 = math.Vector3(f32);
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;

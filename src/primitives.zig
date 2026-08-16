@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const Mesh = @import("Mesh.zig");
 const Builder = @import("Builder.zig");
 const math = @import("math.zig");
-const Vector3 = math.Vector3;
+const Vector3 = math.Vector3(f32);
 const triangleNormal = @import("utils.zig").triangleNormal;
 
 /// Axis-aligned box centered on the origin with the given side lengths.
