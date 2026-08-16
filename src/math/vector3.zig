@@ -1,4 +1,5 @@
 const std = @import("std");
+const Matrix4 = @import("matrix4.zig").Matrix4;
 
 pub const Vector3 = extern struct {
     x: f32,
@@ -161,6 +162,24 @@ pub const Vector3 = extern struct {
         return @abs(self.x - other.x) <= tolerance and
             @abs(self.y - other.y) <= tolerance and
             @abs(self.z - other.z) <= tolerance;
+    }
+
+    // NOTE: this assumes affine matrices, maybe in the future change to homogeneous
+    // if perspective is needed
+    pub fn transformPoint(self: Vector3, m: Matrix4) Vector3 {
+        return .{
+            .x = m.m[0][0] * self.x + m.m[1][0] * self.y + m.m[2][0] * self.z + m.m[3][0],
+            .y = m.m[0][1] * self.x + m.m[1][1] * self.y + m.m[2][1] * self.z + m.m[3][1],
+            .z = m.m[0][2] * self.x + m.m[1][2] * self.y + m.m[2][2] * self.z + m.m[3][2],
+        };
+    }
+
+    pub fn transformDirection(self: Vector3, m: Matrix4) Vector3 {
+        return .{
+            .x = m.m[0][0] * self.x + m.m[1][0] * self.y + m.m[2][0] * self.z,
+            .y = m.m[0][1] * self.x + m.m[1][1] * self.y + m.m[2][1] * self.z,
+            .z = m.m[0][2] * self.x + m.m[1][2] * self.y + m.m[2][2] * self.z,
+        };
     }
 };
 
